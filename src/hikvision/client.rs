@@ -283,6 +283,18 @@ impl HikvisionClient {
                     out.len()
                 )));
             }
+            if command == ffi::NET_DVR_GET_IPPARACFG_V40
+                && bytes_returned < std::mem::size_of::<ffi::NET_DVR_IPPARACFG_V40>()
+            {
+                crate::log_step!(
+                    "sdk",
+                    "ipcfg_v40_short_read",
+                    "bytesReturned={} expected={} -> fallback_to_v31",
+                    bytes_returned,
+                    std::mem::size_of::<ffi::NET_DVR_IPPARACFG_V40>()
+                );
+                return Ok(None);
+            }
             out.truncate(bytes_returned);
             Ok(Some(IpConfigRaw {
                 version: match command {

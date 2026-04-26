@@ -1,0 +1,9 @@
+.git
+.github
+.cursor
+.vscode
+target
+**/*.rs.bk
+Cargo.lock.bak
+README.md
+LICENSE
