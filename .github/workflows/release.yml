@@ -1,0 +1,100 @@
+name: Build and Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (example: v0.1.0)"
+        required: true
+      name:
+        description: "Release title"
+        required: false
+      prerelease:
+        description: "Mark release as prerelease"
+        required: false
+        type: boolean
+        default: false
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            archive: tar.gz
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            archive: zip
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build release binary
+        run: cargo build --release --locked --target ${{ matrix.target }}
+
+      - name: Prepare packaged artifact (non-Windows)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP_NAME="hikvision-relay"
+          TARGET="${{ matrix.target }}"
+          OUT_DIR="dist"
+          mkdir -p "${OUT_DIR}"
+          cp "target/${TARGET}/release/${APP_NAME}" "${OUT_DIR}/${APP_NAME}"
+          ARCHIVE="${APP_NAME}-${TARGET}.tar.gz"
+          tar -C "${OUT_DIR}" -czf "${ARCHIVE}" "${APP_NAME}"
+          echo "ASSET_PATH=${ARCHIVE}" >> "$GITHUB_ENV"
+
+      - name: Prepare packaged artifact (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $AppName = "hikvision-relay"
+          $Target = "${{ matrix.target }}"
+          New-Item -ItemType Directory -Path dist -Force | Out-Null
+          Copy-Item "target/$Target/release/$AppName.exe" "dist/$AppName.exe" -Force
+          $Archive = "$AppName-$Target.zip"
+          Compress-Archive -Path "dist/$AppName.exe" -DestinationPath $Archive -Force
+          "ASSET_PATH=$Archive" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: ${{ env.ASSET_PATH }}
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub Release
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
+          name: ${{ github.event.inputs.name || format('Release {0}', github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name) }}
+          prerelease: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.prerelease || false }}
+          files: artifacts/**/*
