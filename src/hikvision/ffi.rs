@@ -133,7 +133,7 @@ fn sdk_library_path_from_root(root: &Path) -> PathBuf {
     root.join("lib").join(sdk_library_name())
 }
 
-pub type RealDataCallback = unsafe extern "C" fn(i32, u32, *mut u8, u32, u32);
+pub type RealDataCallback = unsafe extern "C" fn(LONG, DWORD, *mut u8, DWORD, DWORD);
 
 fn api() -> &'static HCNetSdkLib {
     SDK_API.get().expect("HCNetSDK API must be initialized")
@@ -146,50 +146,57 @@ pub unsafe fn net_dvr_cleanup() -> i32 {
     api().NET_DVR_Cleanup()
 }
 pub unsafe fn net_dvr_get_last_error() -> u32 {
-    api().NET_DVR_GetLastError()
+    api().NET_DVR_GetLastError() as u32
 }
 pub unsafe fn net_dvr_set_connect_time(wait_ms: u32, retries: u32) -> i32 {
-    api().NET_DVR_SetConnectTime(wait_ms, retries)
+    api().NET_DVR_SetConnectTime(wait_ms as DWORD, retries as DWORD)
 }
-pub unsafe fn net_dvr_login_v40(login: *mut NET_DVR_USER_LOGIN_INFO, device_info: *mut NET_DVR_DEVICEINFO_V40) -> i32 {
+pub unsafe fn net_dvr_login_v40(login: *mut NET_DVR_USER_LOGIN_INFO, device_info: *mut NET_DVR_DEVICEINFO_V40) -> LONG {
     api().NET_DVR_Login_V40(login, device_info)
 }
-pub unsafe fn net_dvr_logout(user_id: i32) -> i32 {
+pub unsafe fn net_dvr_logout(user_id: LONG) -> i32 {
     api().NET_DVR_Logout(user_id)
 }
 pub unsafe fn net_dvr_get_sdk_version() -> u32 {
-    api().NET_DVR_GetSDKVersion()
+    api().NET_DVR_GetSDKVersion() as u32
 }
 pub unsafe fn net_dvr_get_sdk_build_version() -> u32 {
-    api().NET_DVR_GetSDKBuildVersion()
+    api().NET_DVR_GetSDKBuildVersion() as u32
 }
 pub unsafe fn net_dvr_get_dvr_config(
-    user_id: i32,
+    user_id: LONG,
     command: u32,
-    channel: i32,
+    channel: LONG,
     out: *mut c_void,
     out_len: u32,
     bytes_returned: *mut u32,
 ) -> i32 {
-    api().NET_DVR_GetDVRConfig(user_id, command, channel, out, out_len, bytes_returned)
+    api().NET_DVR_GetDVRConfig(
+        user_id,
+        command as DWORD,
+        channel,
+        out,
+        out_len as DWORD,
+        bytes_returned as *mut DWORD,
+    )
 }
 pub unsafe fn net_dvr_realplay_v40(
-    user_id: i32,
+    user_id: LONG,
     preview_info: *mut NET_DVR_PREVIEWINFO,
-    cb: Option<unsafe extern "C" fn(i32, u32, *mut u8, u32, *mut c_void)>,
+    cb: Option<unsafe extern "C" fn(LONG, DWORD, *mut u8, DWORD, *mut c_void)>,
     user_ptr: *mut c_void,
-) -> i32 {
+) -> LONG {
     api().NET_DVR_RealPlay_V40(user_id, preview_info, cb, user_ptr)
 }
-pub unsafe fn net_dvr_stop_realplay(handle: i32) -> i32 {
+pub unsafe fn net_dvr_stop_realplay(handle: LONG) -> i32 {
     api().NET_DVR_StopRealPlay(handle)
 }
 pub unsafe fn net_dvr_set_standard_data_callback(
-    handle: i32,
+    handle: LONG,
     cb: Option<RealDataCallback>,
     user: u32,
 ) -> i32 {
-    let cb_cast: Option<unsafe extern "C" fn(i32, u32, *mut u8, u32, u32)> = cb;
-    api().NET_DVR_SetStandardDataCallBack(handle, cb_cast, user)
+    let cb_cast: Option<unsafe extern "C" fn(LONG, DWORD, *mut u8, DWORD, DWORD)> = cb;
+    api().NET_DVR_SetStandardDataCallBack(handle, cb_cast, user as DWORD)
 }
 

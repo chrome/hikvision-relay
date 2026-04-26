@@ -42,30 +42,30 @@ pub trait HikSdk: Send + Sync {
         &self,
         login: *mut ffi::NET_DVR_USER_LOGIN_INFO,
         device_info: *mut ffi::NET_DVR_DEVICEINFO_V40,
-    ) -> i32;
-    fn logout(&self, user_id: i32) -> i32;
+    ) -> ffi::LONG;
+    fn logout(&self, user_id: ffi::LONG) -> i32;
     fn get_sdk_version(&self) -> u32;
     fn get_sdk_build_version(&self) -> u32;
     fn get_dvr_config(
         &self,
-        user_id: i32,
+        user_id: ffi::LONG,
         command: u32,
-        channel: i32,
+        channel: ffi::LONG,
         out: *mut c_void,
         out_len: u32,
         bytes_returned: *mut u32,
     ) -> i32;
     fn realplay_v40(
         &self,
-        user_id: i32,
+        user_id: ffi::LONG,
         preview_info: *mut ffi::NET_DVR_PREVIEWINFO,
-        cb: Option<unsafe extern "C" fn(i32, u32, *mut u8, u32, *mut c_void)>,
+        cb: Option<unsafe extern "C" fn(ffi::LONG, ffi::DWORD, *mut u8, ffi::DWORD, *mut c_void)>,
         user_ptr: *mut c_void,
-    ) -> i32;
-    fn stop_realplay(&self, handle: i32) -> i32;
+    ) -> ffi::LONG;
+    fn stop_realplay(&self, handle: ffi::LONG) -> i32;
     fn set_standard_data_callback(
         &self,
-        handle: i32,
+        handle: ffi::LONG,
         cb: Option<ffi::RealDataCallback>,
         user: u32,
     ) -> i32;
@@ -94,11 +94,11 @@ impl HikSdk for RealHikSdk {
         &self,
         login: *mut ffi::NET_DVR_USER_LOGIN_INFO,
         device_info: *mut ffi::NET_DVR_DEVICEINFO_V40,
-    ) -> i32 {
+    ) -> ffi::LONG {
         // SAFETY: pointers are owned by caller.
         unsafe { ffi::net_dvr_login_v40(login, device_info) }
     }
-    fn logout(&self, user_id: i32) -> i32 {
+    fn logout(&self, user_id: ffi::LONG) -> i32 {
         // SAFETY: direct SDK call.
         unsafe { ffi::net_dvr_logout(user_id) }
     }
@@ -112,9 +112,9 @@ impl HikSdk for RealHikSdk {
     }
     fn get_dvr_config(
         &self,
-        user_id: i32,
+        user_id: ffi::LONG,
         command: u32,
-        channel: i32,
+        channel: ffi::LONG,
         out: *mut c_void,
         out_len: u32,
         bytes_returned: *mut u32,
@@ -124,21 +124,21 @@ impl HikSdk for RealHikSdk {
     }
     fn realplay_v40(
         &self,
-        user_id: i32,
+        user_id: ffi::LONG,
         preview_info: *mut ffi::NET_DVR_PREVIEWINFO,
-        cb: Option<unsafe extern "C" fn(i32, u32, *mut u8, u32, *mut c_void)>,
+        cb: Option<unsafe extern "C" fn(ffi::LONG, ffi::DWORD, *mut u8, ffi::DWORD, *mut c_void)>,
         user_ptr: *mut c_void,
-    ) -> i32 {
+    ) -> ffi::LONG {
         // SAFETY: pointers are owned by caller.
         unsafe { ffi::net_dvr_realplay_v40(user_id, preview_info, cb, user_ptr) }
     }
-    fn stop_realplay(&self, handle: i32) -> i32 {
+    fn stop_realplay(&self, handle: ffi::LONG) -> i32 {
         // SAFETY: direct SDK call.
         unsafe { ffi::net_dvr_stop_realplay(handle) }
     }
     fn set_standard_data_callback(
         &self,
-        handle: i32,
+        handle: ffi::LONG,
         cb: Option<ffi::RealDataCallback>,
         user: u32,
     ) -> i32 {
@@ -157,8 +157,8 @@ fn sdk_code_error(context: impl Into<String>, code: u32) -> AppError {
 
 pub struct HikvisionClient {
     sdk: &'static dyn HikSdk,
-    user_id: i32,
-    real_handle: i32,
+    user_id: ffi::LONG,
+    real_handle: ffi::LONG,
     initialized: bool,
     /// First digital channel index from `NET_DVR_DEVICEINFO_V40` (byte offset 66), default 1.
     start_digital_channel: u8,
@@ -320,7 +320,7 @@ impl HikvisionClient {
             return Err(AppError::Sdk(String::from("Preview already running")));
         }
         let mut preview_info: ffi::NET_DVR_PREVIEWINFO = unsafe { std::mem::zeroed() };
-        preview_info.lChannel = channel;
+        preview_info.lChannel = channel as ffi::LONG;
         preview_info.dwStreamType = if stream == StreamType::Sub { 1 } else { 0 };
         preview_info.dwLinkMode = 0;
         preview_info.bBlocked = 1;

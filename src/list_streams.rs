@@ -104,7 +104,7 @@ fn list_from_v40(
         ip_devices.push(ip_device_entry_from_v31(&v40.struIPDevInfo[i], i));
     }
 
-    let dchan = v40.dwDChanNum.min(MAX_IP_CHANNEL as u32) as usize;
+    let dchan = v40.dwDChanNum.min(MAX_IP_CHANNEL as ffi::DWORD) as usize;
     let start_d = v40.dwStartDChan as usize;
 
     let mut ip_channels = Vec::with_capacity(dchan);

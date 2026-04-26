@@ -9,9 +9,9 @@ use crate::hikvision::ffi;
 
 pub type CallbackFn = Arc<dyn Fn(u32, Vec<u8>) + Send + Sync + 'static>;
 
-static CALLBACK_REGISTRY: Lazy<Mutex<HashMap<i32, CallbackFn>>> = Lazy::new(|| Mutex::new(HashMap::new()));
+static CALLBACK_REGISTRY: Lazy<Mutex<HashMap<ffi::LONG, CallbackFn>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 
-unsafe extern "C" fn raw_cb(handle: i32, data_type: u32, ptr: *mut u8, len: u32, _user: u32) {
+unsafe extern "C" fn raw_cb(handle: ffi::LONG, data_type: ffi::DWORD, ptr: *mut u8, len: ffi::DWORD, _user: ffi::DWORD) {
     let chunk = if ptr.is_null() || len == 0 {
         Vec::new()
     } else {
@@ -20,7 +20,7 @@ unsafe extern "C" fn raw_cb(handle: i32, data_type: u32, ptr: *mut u8, len: u32,
     };
     let handler = CALLBACK_REGISTRY.lock().get(&handle).cloned();
     if let Some(handler) = handler {
-        if catch_unwind(AssertUnwindSafe(|| (handler)(data_type, chunk))).is_err() {
+        if catch_unwind(AssertUnwindSafe(|| (handler)(data_type as u32, chunk))).is_err() {
             crate::log_step!("sdk", "callback_panicked", "handle={handle} dataType={data_type}");
         }
     }
@@ -30,11 +30,11 @@ pub(super) fn callback_entrypoint() -> ffi::RealDataCallback {
     raw_cb
 }
 
-pub(super) fn register_callback(handle: i32, cb: CallbackFn) {
+pub(super) fn register_callback(handle: ffi::LONG, cb: CallbackFn) {
     CALLBACK_REGISTRY.lock().insert(handle, cb);
 }
 
-pub(super) fn unregister_callback(handle: i32) {
+pub(super) fn unregister_callback(handle: ffi::LONG) {
     CALLBACK_REGISTRY.lock().remove(&handle);
 }
 
