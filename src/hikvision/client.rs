@@ -216,9 +216,9 @@ impl HikvisionClient {
         let mut login_info: ffi::NET_DVR_USER_LOGIN_INFO = unsafe { std::mem::zeroed() };
         let mut dev_info: ffi::NET_DVR_DEVICEINFO_V40 = unsafe { std::mem::zeroed() };
 
-        write_cstr_i8(&mut login_info.sDeviceAddress, &conn.ip);
-        write_cstr_i8(&mut login_info.sUserName, &conn.user);
-        write_cstr_i8(&mut login_info.sPassword, &conn.password);
+        write_cstr(&mut login_info.sDeviceAddress, &conn.ip);
+        write_cstr(&mut login_info.sUserName, &conn.user);
+        write_cstr(&mut login_info.sPassword, &conn.password);
         login_info.wPort = conn.port;
         login_info.bUseAsynLogin = 0;
 
@@ -389,15 +389,34 @@ impl Drop for HikvisionClient {
     }
 }
 
-fn write_cstr_i8(target: &mut [i8], value: &str) {
-    target.fill(0);
+trait CChar: Sized {
+    fn from_u8(b: u8) -> Self;
+    fn zero() -> Self {
+        Self::from_u8(0)
+    }
+}
+
+impl CChar for i8 {
+    fn from_u8(b: u8) -> Self {
+        b as i8
+    }
+}
+
+impl CChar for u8 {
+    fn from_u8(b: u8) -> Self {
+        b
+    }
+}
+
+fn write_cstr<T: CChar + Copy>(target: &mut [T], value: &str) {
+    target.fill(T::zero());
     if target.is_empty() {
         return;
     }
     let bytes = value.as_bytes();
     let take = bytes.len().min(target.len() - 1);
     for i in 0..take {
-        target[i] = bytes[i] as i8;
+        target[i] = T::from_u8(bytes[i]);
     }
 }
 
