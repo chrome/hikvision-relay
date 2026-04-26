@@ -1,0 +1,35 @@
+services:
+  hikvision-relay:
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: hikvision-relay
+    restart: unless-stopped
+    ports:
+      - "${HIKVISION_EXPOSE_RTSP_PORT:-8554}:8554"
+    environment:
+      # Device connection.
+      HIKVISION_HOST: "${HIKVISION_HOST:-127.0.0.1}"
+      HIKVISION_PORT: "${HIKVISION_PORT:-8000}"
+      HIKVISION_USER: "${HIKVISION_USER:-admin}"
+      HIKVISION_PASSWORD: "${HIKVISION_PASSWORD:-password}"
+
+      # SDK location inside container.
+      HIKVISION_SDK_PATH: "/opt/hikvision/sdk"
+
+      # Mode toggles.
+      HIKVISION_RTSP_RELAY: "${HIKVISION_RTSP_RELAY:-true}"
+      HIKVISION_JSON_OUTPUT: "${HIKVISION_JSON_OUTPUT:-false}"
+      HIKVISION_VERBOSE: "${HIKVISION_VERBOSE:-false}"
+      HIKVISION_INCLUDE_RAW_CONFIG: "${HIKVISION_INCLUDE_RAW_CONFIG:-false}"
+
+      # Relay settings.
+      HIKVISION_LISTEN_HOST: "${HIKVISION_LISTEN_HOST:-0.0.0.0}"
+      HIKVISION_LISTEN_PORT: "8554"
+      HIKVISION_LISTEN_PATH: "${HIKVISION_LISTEN_PATH:-/live}"
+      HIKVISION_PROBE_TIMEOUT_MS: "${HIKVISION_PROBE_TIMEOUT_MS:-15000}"
+      HIKVISION_STALE_AFTER_MS: "${HIKVISION_STALE_AFTER_MS:-10000}"
+      HIKVISION_IDLE_GRACE_MS: "${HIKVISION_IDLE_GRACE_MS:-5000}"
+      HIKVISION_RESTART_ON_FAIL: "${HIKVISION_RESTART_ON_FAIL:-false}"
+      HIKVISION_MAX_RESTARTS: "${HIKVISION_MAX_RESTARTS:-5}"

@@ -57,7 +57,7 @@ COMMON_BINDGEN_FLAGS := \
 	--no-doc-comments \
 	--with-derive-default \
 	--no-derive-debug \
-	--prepend-enum-name=false \
+	--no-prepend-enum-name \
 	$(ALLOWLIST_FUNCTIONS) \
 	$(ALLOWLIST_TYPES) \
 	$(ALLOWLIST_VARS)
@@ -84,40 +84,40 @@ bindings-win64: ensure-bindgen
 	@mkdir -p "$(GEN_DIR)"
 	$(BINDGEN) "$(WRAPPER)" \
 		$(COMMON_BINDGEN_FLAGS) \
-		--clang-arg -I$(WIN64_SDK_INC) \
-		--clang-arg -x \
-		--clang-arg c++ \
-		--clang-arg -std=c++14 \
-		--clang-arg -DWIN32 \
-		--clang-arg -D_WIN32 \
-		--clang-arg -D_MSC_VER=1929 \
-		-o "$(GEN_DIR)/windows_x86_64.rs"
+		-o "$(GEN_DIR)/windows_x86_64.rs" \
+		-- \
+		-I$(WIN64_SDK_INC) \
+		-x c++ \
+		-std=c++14 \
+		-DWIN32 \
+		-D_WIN32 \
+		-D_MSC_VER=1929
 
 bindings-linux64: ensure-bindgen
 	@mkdir -p "$(GEN_DIR)"
 	$(BINDGEN) "$(WRAPPER)" \
 		$(COMMON_BINDGEN_FLAGS) \
-		--clang-arg -I$(LINUX64_SDK_INC) \
-		--clang-arg -x \
-		--clang-arg c++ \
-		--clang-arg -std=c++14 \
-		--clang-arg -D__linux__ \
-		--clang-arg -D_GNU_SOURCE \
-		--clang-arg -D__GNUC__=11 \
-		-o "$(GEN_DIR)/linux_x86_64.rs"
+		-o "$(GEN_DIR)/linux_x86_64.rs" \
+		-- \
+		-I$(LINUX64_SDK_INC) \
+		-x c++ \
+		-std=c++14 \
+		-D__linux__ \
+		-D_GNU_SOURCE \
+		-D__GNUC__=11
 
 bindings-linux32: ensure-bindgen
 	@mkdir -p "$(GEN_DIR)"
 	$(BINDGEN) "$(WRAPPER)" \
 		$(COMMON_BINDGEN_FLAGS) \
-		--clang-arg -I$(LINUX32_SDK_INC) \
-		--clang-arg -x \
-		--clang-arg c++ \
-		--clang-arg -std=c++14 \
-		--clang-arg -D__linux__ \
-		--clang-arg -D_GNU_SOURCE \
-		--clang-arg -D__GNUC__=11 \
-		-o "$(GEN_DIR)/linux_x86.rs"
+		-o "$(GEN_DIR)/linux_x86.rs" \
+		-- \
+		-I$(LINUX32_SDK_INC) \
+		-x c++ \
+		-std=c++14 \
+		-D__linux__ \
+		-D_GNU_SOURCE \
+		-D__GNUC__=11
 
 build:
 	cargo build

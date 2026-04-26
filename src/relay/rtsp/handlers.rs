@@ -28,7 +28,7 @@ pub(crate) async fn build_rtsp_response(
             if route.is_none() {
                 rtsp_response("404 Not Found", cseq, vec![], None)
             } else if !wait_parameter_sets(shared, route.expect("route exists"), 8_000).await {
-                rtsp_response("503 Service Unavailable", cseq, vec![("Retry-After", "2")], None)
+                rtsp_response("503 Service Unavailable", cseq, vec![("Retry-After", "1")], None)
             } else {
                 let sdp = build_sdp(shared, route.expect("route exists"), &req.url);
                 let content_base = if req.url.ends_with('/') {
@@ -285,34 +285,29 @@ pub(crate) fn build_sdp(shared: &Shared, route: crate::relay::rtsp::protocol::Ro
             "a=rtpmap:{} H265/{}",
             RTP_PAYLOAD_TYPE_VIDEO_DEFAULT, RTP_CLOCK_HZ
         ));
-        let vps = vps
-            .map(|v| base64::engine::general_purpose::STANDARD.encode(v))
-            .unwrap_or_default();
-        let sps = sps
-            .map(|v| base64::engine::general_purpose::STANDARD.encode(v))
-            .unwrap_or_default();
-        let pps = pps
-            .map(|v| base64::engine::general_purpose::STANDARD.encode(v))
-            .unwrap_or_default();
-        lines.push(format!(
-            "a=fmtp:{} sprop-vps={}; sprop-sps={}; sprop-pps={}",
-            RTP_PAYLOAD_TYPE_VIDEO_DEFAULT, vps, sps, pps
-        ));
+        if let (Some(vps), Some(sps), Some(pps)) = (vps, sps, pps) {
+            let vps = base64::engine::general_purpose::STANDARD.encode(vps);
+            let sps = base64::engine::general_purpose::STANDARD.encode(sps);
+            let pps = base64::engine::general_purpose::STANDARD.encode(pps);
+            lines.push(format!(
+                "a=fmtp:{} sprop-vps={}; sprop-sps={}; sprop-pps={}",
+                RTP_PAYLOAD_TYPE_VIDEO_DEFAULT, vps, sps, pps
+            ));
+        }
     } else {
         lines.push(format!(
             "a=rtpmap:{} H264/{}",
             RTP_PAYLOAD_TYPE_VIDEO_DEFAULT, RTP_CLOCK_HZ
         ));
-        let sps_raw = sps.unwrap_or_default();
-        let pli = profile_level_id_hex_from_sps(&sps_raw);
-        let sps = base64::engine::general_purpose::STANDARD.encode(&sps_raw);
-        let pps = pps
-            .map(|v| base64::engine::general_purpose::STANDARD.encode(v))
-            .unwrap_or_default();
-        lines.push(format!(
-            "a=fmtp:{} packetization-mode=1; profile-level-id={pli}; sprop-parameter-sets={sps},{pps}",
-            RTP_PAYLOAD_TYPE_VIDEO_DEFAULT
-        ));
+        if let (Some(sps), Some(pps)) = (sps, pps) {
+            let pli = profile_level_id_hex_from_sps(&sps);
+            let sps = base64::engine::general_purpose::STANDARD.encode(sps);
+            let pps = base64::engine::general_purpose::STANDARD.encode(pps);
+            lines.push(format!(
+                "a=fmtp:{} packetization-mode=1; profile-level-id={pli}; sprop-parameter-sets={sps},{pps}",
+                RTP_PAYLOAD_TYPE_VIDEO_DEFAULT
+            ));
+        }
     }
     lines.push(String::from("a=control:trackID=0"));
     if let Some(a) = audio_cfg {

@@ -258,6 +258,56 @@ hikvision \
   --restart-on-fail
 ```
 
+## Docker
+
+### 1) Clone the repo
+### 2) Prepare SDK files
+
+The image expects the full Hikvision Linux SDK package in the local `sdk/` folder at the repository root.
+
+```text
+./sdk/EN-HCNetSDKV6.1.9.4_build20220412_linux64/lib
+```
+
+### 3) Configure environment variables
+
+Create a `.env` file near `docker-compose.yml` (or export variables in your shell):
+
+```dotenv
+HIKVISION_HOST=192.168.1.64
+HIKVISION_PORT=8000
+HIKVISION_USER=admin
+HIKVISION_PASSWORD=your_password
+```
+
+Check `docker-compose.yaml` for the rest of variables
+
+### 3) Build and start
+
+```bash
+docker compose up --build -d
+```
+
+Check container logs:
+
+```bash
+docker compose logs -f hikvision-relay
+```
+
+Stop and remove the container:
+
+```bash
+docker compose down
+```
+
+### 4) Connect to the relay
+
+Default RTSP route format:
+
+```text
+rtsp://127.0.0.1:8554/live/<channel>/<main|sub>
+```
+
 ## Developer guide
 
 ### Build from source

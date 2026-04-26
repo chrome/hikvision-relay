@@ -7,7 +7,7 @@ use crate::config::{RelayConfig, RuntimeConfig, StreamType};
 use crate::error::{AppError, AppResult};
 use crate::hikvision::client::{CallbackFn, HikvisionClient, RelayStats};
 use crate::hikvision::ffi::{NET_DVR_STREAMDATA, NET_DVR_SYSHEAD};
-use crate::relay::depacketizer::RtpVideoDepacketizer;
+use crate::relay::depacketizer::{RtpVideoDepacketizer, VideoCodec};
 use crate::relay::rtsp::protocol::RouteKey;
 use crate::relay::rtsp_server::EmbeddedRtspServer;
 use crate::relay::watchdog_policy::PipelineWatchdog;
@@ -121,10 +121,9 @@ pub(crate) async fn start_pipeline_with_retries(
                     chunk.len()
                 );
             }
-            if data_type == NET_DVR_SYSHEAD {
-                return;
-            }
-            if data_type != NET_DVR_STREAMDATA {
+            let is_syshead = data_type == NET_DVR_SYSHEAD;
+            let is_stream = data_type == NET_DVR_STREAMDATA;
+            if !is_syshead && !is_stream {
                 crate::log_step!(
                     "callback",
                     "non_stream_data",
@@ -134,31 +133,51 @@ pub(crate) async fn start_pipeline_with_retries(
                 );
                 return;
             }
-            let mut w = watch_cb.lock();
-            let now = Instant::now();
-            w.last_stream_data = Some(now);
-            if w.first_stream_data.is_none() {
-                w.first_stream_data = Some(now);
+            if is_stream {
+                let mut w = watch_cb.lock();
+                let now = Instant::now();
+                w.last_stream_data = Some(now);
+                if w.first_stream_data.is_none() {
+                    w.first_stream_data = Some(now);
+                }
+                drop(w);
             }
-            drop(w);
 
             let mut stats_guard = stats_cb.lock();
-            stats_guard.sdk_chunks += 1;
-            stats_guard.sdk_bytes += chunk.len();
+            if is_stream {
+                stats_guard.sdk_chunks += 1;
+                stats_guard.sdk_bytes += chunk.len();
+            }
             let mut dep_guard = dep_cb.lock();
-            let (nals, audio) = dep_guard.feed_rtp_packet(&chunk);
+            let (nals, audio) = dep_guard.feed_sdk_chunk(&chunk);
             if let Some(codec) = dep_guard.video_codec {
                 match codec {
-                    crate::relay::depacketizer::VideoCodec::H264 => server_cb.set_video_codec_for_route(route, "H264"),
-                    crate::relay::depacketizer::VideoCodec::H265 => server_cb.set_video_codec_for_route(route, "H265"),
+                    VideoCodec::H264 => server_cb.set_video_codec_for_route(route, "H264"),
+                    VideoCodec::H265 => server_cb.set_video_codec_for_route(route, "H265"),
                 }
             }
-            stats_guard.rtp_packets += 1;
+            if !is_syshead {
+                stats_guard.rtp_packets += 1;
+            }
+            drop(dep_guard);
             drop(stats_guard);
-            if let Some(audio) = audio {
-                server_cb.feed_audio_rtp_for_route(route, &audio.payload, audio.timestamp, audio.marker);
+            if let Some(audio_packet) = audio {
+                server_cb.feed_audio_rtp_for_route(route, &audio_packet.payload, audio_packet.timestamp, audio_packet.marker);
             }
             if !nals.is_empty() {
+                let mut dep_guard = dep_cb.lock();
+                if dep_guard.video_codec.is_none() {
+                    if let Some(first) = nals.first() {
+                        dep_guard.video_codec = first.first().copied().and_then(crate::relay::depacketizer::detect_codec);
+                    }
+                }
+                if let Some(codec) = dep_guard.video_codec {
+                    match codec {
+                        VideoCodec::H264 => server_cb.set_video_codec_for_route(route, "H264"),
+                        VideoCodec::H265 => server_cb.set_video_codec_for_route(route, "H265"),
+                    }
+                }
+                drop(dep_guard);
                 let mut w2 = watch_cb.lock();
                 if w2.first_nal_at.is_none() {
                     w2.first_nal_at = Some(Instant::now());

@@ -9,19 +9,13 @@ pub const NET_DVR_GET_IPPARACFG_V31: u32 = 1060;
 pub const NET_DVR_GET_IPPARACFG_V40: u32 = 1062;
 pub const NET_DVR_SYSHEAD: u32 = 1;
 pub const NET_DVR_STREAMDATA: u32 = 2;
-pub type DWORD = ::std::os::raw::c_ulong;
-pub type BOOL = ::std::os::raw::c_int;
-pub type BYTE = ::std::os::raw::c_uchar;
+pub type DWORD = ::std::os::raw::c_uint;
 pub type WORD = ::std::os::raw::c_ushort;
-pub type LPDWORD = *mut DWORD;
+pub type LONG = ::std::os::raw::c_int;
+pub type BYTE = ::std::os::raw::c_uchar;
 pub type LPVOID = *mut ::std::os::raw::c_void;
-pub type LONG = ::std::os::raw::c_long;
-#[repr(C)]
-#[derive(Default, Copy, Clone)]
-pub struct HWND__ {
-    pub unused: ::std::os::raw::c_int,
-}
-pub type HWND = *mut HWND__;
+pub type LPDWORD = *mut ::std::os::raw::c_uint;
+pub type HWND = *mut ::std::os::raw::c_void;
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct NET_DVR_IPADDR {
@@ -514,7 +508,7 @@ pub struct NET_DVR_USER_LOGIN_INFO {
     pub sPassword: [::std::os::raw::c_char; 64usize],
     pub cbLoginResult: fLoginResultCallBack,
     pub pUser: *mut ::std::os::raw::c_void,
-    pub bUseAsynLogin: BOOL,
+    pub bUseAsynLogin: ::std::os::raw::c_int,
     pub byProxyType: BYTE,
     pub byUseUTCTime: BYTE,
     pub byLoginMode: BYTE,
@@ -544,10 +538,11 @@ pub type REALDATACALLBACK = ::std::option::Option<
 >;
 pub struct HCNetSdkLib {
     __library: ::libloading::Library,
-    pub NET_DVR_Init: Result<unsafe extern "C" fn() -> BOOL, ::libloading::Error>,
-    pub NET_DVR_Cleanup: Result<unsafe extern "C" fn() -> BOOL, ::libloading::Error>,
+    pub NET_DVR_Init: Result<unsafe extern "C" fn() -> ::std::os::raw::c_int, ::libloading::Error>,
+    pub NET_DVR_Cleanup:
+        Result<unsafe extern "C" fn() -> ::std::os::raw::c_int, ::libloading::Error>,
     pub NET_DVR_SetConnectTime: Result<
-        unsafe extern "C" fn(dwWaitTime: DWORD, dwTryTimes: DWORD) -> BOOL,
+        unsafe extern "C" fn(dwWaitTime: DWORD, dwTryTimes: DWORD) -> ::std::os::raw::c_int,
         ::libloading::Error,
     >,
     pub NET_DVR_GetSDKVersion: Result<unsafe extern "C" fn() -> DWORD, ::libloading::Error>,
@@ -559,7 +554,8 @@ pub struct HCNetSdkLib {
         ) -> LONG,
         ::libloading::Error,
     >,
-    pub NET_DVR_Logout: Result<unsafe extern "C" fn(lUserID: LONG) -> BOOL, ::libloading::Error>,
+    pub NET_DVR_Logout:
+        Result<unsafe extern "C" fn(lUserID: LONG) -> ::std::os::raw::c_int, ::libloading::Error>,
     pub NET_DVR_GetLastError: Result<unsafe extern "C" fn() -> DWORD, ::libloading::Error>,
     pub NET_DVR_RealPlay_V40: Result<
         unsafe extern "C" fn(
@@ -570,8 +566,10 @@ pub struct HCNetSdkLib {
         ) -> LONG,
         ::libloading::Error,
     >,
-    pub NET_DVR_StopRealPlay:
-        Result<unsafe extern "C" fn(lRealHandle: LONG) -> BOOL, ::libloading::Error>,
+    pub NET_DVR_StopRealPlay: Result<
+        unsafe extern "C" fn(lRealHandle: LONG) -> ::std::os::raw::c_int,
+        ::libloading::Error,
+    >,
     pub NET_DVR_SetStandardDataCallBack: Result<
         unsafe extern "C" fn(
             lRealHandle: LONG,
@@ -585,7 +583,7 @@ pub struct HCNetSdkLib {
                 ),
             >,
             dwUser: DWORD,
-        ) -> BOOL,
+        ) -> ::std::os::raw::c_int,
         ::libloading::Error,
     >,
     pub NET_DVR_GetDVRConfig: Result<
@@ -596,7 +594,7 @@ pub struct HCNetSdkLib {
             lpOutBuffer: LPVOID,
             dwOutBufferSize: DWORD,
             lpBytesReturned: LPDWORD,
-        ) -> BOOL,
+        ) -> ::std::os::raw::c_int,
         ::libloading::Error,
     >,
 }
@@ -645,19 +643,23 @@ impl HCNetSdkLib {
             NET_DVR_GetDVRConfig,
         })
     }
-    pub unsafe fn NET_DVR_Init(&self) -> BOOL {
+    pub unsafe fn NET_DVR_Init(&self) -> ::std::os::raw::c_int {
         (self
             .NET_DVR_Init
             .as_ref()
             .expect("Expected function, got error."))()
     }
-    pub unsafe fn NET_DVR_Cleanup(&self) -> BOOL {
+    pub unsafe fn NET_DVR_Cleanup(&self) -> ::std::os::raw::c_int {
         (self
             .NET_DVR_Cleanup
             .as_ref()
             .expect("Expected function, got error."))()
     }
-    pub unsafe fn NET_DVR_SetConnectTime(&self, dwWaitTime: DWORD, dwTryTimes: DWORD) -> BOOL {
+    pub unsafe fn NET_DVR_SetConnectTime(
+        &self,
+        dwWaitTime: DWORD,
+        dwTryTimes: DWORD,
+    ) -> ::std::os::raw::c_int {
         (self
             .NET_DVR_SetConnectTime
             .as_ref()
@@ -685,7 +687,7 @@ impl HCNetSdkLib {
             .as_ref()
             .expect("Expected function, got error."))(pLoginInfo, lpDeviceInfo)
     }
-    pub unsafe fn NET_DVR_Logout(&self, lUserID: LONG) -> BOOL {
+    pub unsafe fn NET_DVR_Logout(&self, lUserID: LONG) -> ::std::os::raw::c_int {
         (self
             .NET_DVR_Logout
             .as_ref()
@@ -714,7 +716,7 @@ impl HCNetSdkLib {
             pUser,
         )
     }
-    pub unsafe fn NET_DVR_StopRealPlay(&self, lRealHandle: LONG) -> BOOL {
+    pub unsafe fn NET_DVR_StopRealPlay(&self, lRealHandle: LONG) -> ::std::os::raw::c_int {
         (self
             .NET_DVR_StopRealPlay
             .as_ref()
@@ -733,7 +735,7 @@ impl HCNetSdkLib {
             ),
         >,
         dwUser: DWORD,
-    ) -> BOOL {
+    ) -> ::std::os::raw::c_int {
         (self
             .NET_DVR_SetStandardDataCallBack
             .as_ref()
@@ -747,7 +749,7 @@ impl HCNetSdkLib {
         lpOutBuffer: LPVOID,
         dwOutBufferSize: DWORD,
         lpBytesReturned: LPDWORD,
-    ) -> BOOL {
+    ) -> ::std::os::raw::c_int {
         (self
             .NET_DVR_GetDVRConfig
             .as_ref()
