@@ -1,0 +1,8 @@
+.env
+/target
+/sdk
+**/*.rs.bk
+Cargo.lock.bak
+README.md
+/.vscode
+/.cursor
