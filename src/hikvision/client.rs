@@ -7,7 +7,7 @@ use crate::error::{AppError, AppResult};
 use crate::hikvision::ffi;
 use crate::hikvision::lifecycle::{acquire_runtime, release_runtime};
 pub use crate::hikvision::preview::CallbackFn;
-use crate::hikvision::preview::{callback_entrypoint, register_callback, unregister_callback};
+use crate::hikvision::preview::{callback_entrypoint, callback_entrypoint_v40, register_callback, unregister_callback};
 
 pub const NET_DVR_IPPARACFG_V31_SIZE: usize = std::mem::size_of::<ffi::NET_DVR_IPPARACFG_V31>();
 
@@ -323,7 +323,8 @@ impl HikvisionClient {
         preview_info.lChannel = channel as ffi::LONG;
         preview_info.dwStreamType = if stream == StreamType::Sub { 1 } else { 0 };
         preview_info.dwLinkMode = 0;
-        preview_info.bBlocked = 1;
+        // Non-blocking mode is more reliable for RealPlay callback delivery on Linux.
+        preview_info.bBlocked = 0;
         preview_info.dwDisplayBufNum = 1;
 
         crate::log_step!(
@@ -341,11 +342,28 @@ impl HikvisionClient {
         }
         self.real_handle = h;
         crate::log_step!("sdk", "preview_started", "realHandle={}", self.real_handle);
-        register_callback(self.real_handle, cb);
+        register_callback(self.real_handle, cb.clone());
         let ok = self
             .sdk
             .set_standard_data_callback(self.real_handle, Some(callback_entrypoint()), 0);
         if ok == 0 {
+            let code = self.last_error();
+            if code == 12 {
+                crate::log_step!("sdk", "standard_callback_attach_failed_fallback_v40", "errorCode={code}");
+                unregister_callback(self.real_handle);
+                let _ = self.sdk.stop_realplay(self.real_handle);
+                self.real_handle = -1;
+                let h2 = self
+                    .sdk
+                    .realplay_v40(self.user_id, addr_of_mut!(preview_info), Some(callback_entrypoint_v40()), std::ptr::null_mut());
+                if h2 < 0 {
+                    return Err(sdk_code_error("NET_DVR_RealPlay_V40 fallback callback failed", self.last_error()));
+                }
+                self.real_handle = h2;
+                register_callback(self.real_handle, cb);
+                crate::log_step!("sdk", "fallback_v40_callback_attached", "realHandle={}", self.real_handle);
+                return Ok(());
+            }
             unregister_callback(self.real_handle);
             let _ = self.sdk.stop_realplay(self.real_handle);
             self.real_handle = -1;

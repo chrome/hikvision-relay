@@ -14,6 +14,7 @@ pub struct DepacketizerStats {
 
 pub struct RtpVideoDepacketizer {
     fu_buffer: Option<Vec<u8>>,
+    es_buffer: Vec<u8>,
     last_video_seq: Option<u16>,
     pub locked_video_pt: Option<u8>,
     pub locked_video_ssrc: Option<u32>,
@@ -27,6 +28,7 @@ impl RtpVideoDepacketizer {
     pub fn new() -> Self {
         Self {
             fu_buffer: None,
+            es_buffer: Vec::new(),
             last_video_seq: None,
             locked_video_pt: None,
             locked_video_ssrc: None,
@@ -86,6 +88,25 @@ impl RtpVideoDepacketizer {
             VideoCodec::H264 => depack_h264(parsed.payload, &mut self.fu_buffer),
             VideoCodec::H265 => depack_h265(parsed.payload, &mut self.fu_buffer),
         };
+        self.stats.nals_out += out.len();
+        (out, None)
+    }
+    pub fn feed_sdk_chunk(&mut self, chunk: &[u8]) -> (Vec<Vec<u8>>, Option<AudioRtp>) {
+        let (nals, audio) = self.feed_rtp_packet(chunk);
+        if !nals.is_empty() || audio.is_some() {
+            return (nals, audio);
+        }
+        let es_payload = extract_pes_video_payload(chunk);
+        if es_payload.is_empty() {
+            return (Vec::new(), None);
+        }
+        self.es_buffer.extend_from_slice(&es_payload);
+        let out = extract_complete_annexb_nals(&mut self.es_buffer);
+        if self.video_codec.is_none() {
+            if let Some(first) = out.first() {
+                self.video_codec = detect_codec(first.first().copied().unwrap_or_default());
+            }
+        }
         self.stats.nals_out += out.len();
         (out, None)
     }
@@ -155,7 +176,112 @@ fn parse_rtp(packet: &[u8]) -> Option<ParsedRtp<'_>> {
     })
 }
 
-fn detect_codec(b: u8) -> Option<VideoCodec> {
+fn extract_pes_video_payload(chunk: &[u8]) -> Vec<u8> {
+    if chunk.len() < 9 {
+        return Vec::new();
+    }
+    let mut out = Vec::new();
+    let mut i = 0usize;
+    while i + 9 <= chunk.len() {
+        if !(chunk[i] == 0 && chunk[i + 1] == 0 && chunk[i + 2] == 1) {
+            i += 1;
+            continue;
+        }
+        let sid = chunk[i + 3];
+        if !(0xE0..=0xEF).contains(&sid) {
+            i += 4;
+            continue;
+        }
+        let pes_len = u16::from_be_bytes([chunk[i + 4], chunk[i + 5]]) as usize;
+        let header_len = chunk[i + 8] as usize;
+        let payload_start = i + 9 + header_len;
+        if payload_start > chunk.len() {
+            break;
+        }
+        let payload_end = if pes_len > 0 {
+            let pes_end = i + 6 + pes_len;
+            if pes_end > chunk.len() {
+                break;
+            }
+            pes_end
+        } else {
+            let mut j = payload_start;
+            let mut next_start = chunk.len();
+            while j + 3 < chunk.len() {
+                if chunk[j] == 0 && chunk[j + 1] == 0 && chunk[j + 2] == 1 {
+                    next_start = j;
+                    break;
+                }
+                j += 1;
+            }
+            next_start
+        };
+        if payload_end > payload_start {
+            out.extend_from_slice(&chunk[payload_start..payload_end]);
+        }
+        i = payload_end;
+    }
+    out
+}
+
+fn extract_complete_annexb_nals(buffer: &mut Vec<u8>) -> Vec<Vec<u8>> {
+    let starts = find_annexb_starts(buffer);
+    if starts.len() < 2 {
+        return Vec::new();
+    }
+    let mut out = Vec::new();
+    for idx in 0..(starts.len() - 1) {
+        let (s, slen) = starts[idx];
+        let next = starts[idx + 1].0;
+        let start = s + slen;
+        if next > start {
+            let nal = &buffer[start..next];
+            if is_likely_video_nal(nal) {
+                out.push(nal.to_vec());
+            }
+        }
+    }
+    let keep_from = starts[starts.len() - 1].0;
+    buffer.drain(0..keep_from);
+    out
+}
+
+fn find_annexb_starts(buf: &[u8]) -> Vec<(usize, usize)> {
+    let mut starts = Vec::new();
+    let mut i = 0usize;
+    while i + 3 < buf.len() {
+        if i + 4 <= buf.len() && buf[i..i + 4] == [0, 0, 0, 1] {
+            starts.push((i, 4));
+            i += 4;
+            continue;
+        }
+        if buf[i..i + 3] == [0, 0, 1] {
+            starts.push((i, 3));
+            i += 3;
+            continue;
+        }
+        i += 1;
+    }
+    starts
+}
+
+fn is_likely_video_nal(nal: &[u8]) -> bool {
+    if nal.is_empty() {
+        return false;
+    }
+    if detect_codec(nal[0]).is_some() {
+        return true;
+    }
+    if nal.len() >= 2 {
+        let h265_type = (nal[0] >> 1) & 0x3f;
+        if matches!(h265_type, 0..=47 | 48 | 49 | 50) && nal[1] & 0x07 <= 6 {
+            return true;
+        }
+    }
+    false
+}
+
+pub fn detect_codec(b: u8) -> Option<VideoCodec> {
     let h264 = b & 0x1f;
     let h265 = (b >> 1) & 0x3f;
     if matches!(h265, 1 | 19 | 20 | 21 | 32 | 33 | 34 | 35 | 39 | 40 | 48 | 49) {

@@ -587,14 +587,36 @@ impl EmbeddedRtspServer {
     }
 
     fn send_video_nals(&self, route: RouteKey, nals: Vec<Vec<u8>>) {
-        let Some((mut seq, ts, codec, ssrc)) = self.shared.with_route_state(route, |s| {
-            (s.video_rtp.seq, s.video_rtp.ts, s.video_codec.clone(), s.video_rtp.ssrc)
+        let Some((mut seq, ts, codec, ssrc, sps, pps, vps)) = self.shared.with_route_state(route, |s| {
+            (
+                s.video_rtp.seq,
+                s.video_rtp.ts,
+                s.video_codec.clone(),
+                s.video_rtp.ssrc,
+                s.sps.clone(),
+                s.pps.clone(),
+                s.vps.clone(),
+            )
         }) else {
             return;
         };
         let sync_access_unit = is_sync_access_unit(&codec, &nals);
-        for (idx, nal) in nals.iter().enumerate() {
-            let is_last = idx + 1 == nals.len();
+        let mut packet_nals = nals;
+        if sync_access_unit {
+            if codec == "H265" {
+                if let (Some(vps), Some(sps), Some(pps)) = (vps, sps, pps) {
+                    let mut injected = vec![vps, sps, pps];
+                    injected.extend(packet_nals);
+                    packet_nals = injected;
+                }
+            } else if let (Some(sps), Some(pps)) = (sps, pps) {
+                let mut injected = vec![sps, pps];
+                injected.extend(packet_nals);
+                packet_nals = injected;
+            }
+        }
+        for (idx, nal) in packet_nals.iter().enumerate() {
+            let is_last = idx + 1 == packet_nals.len();
             let packets = if codec == "H265" {
                 packetize_h265_nal(nal, seq, ts, is_last, ssrc)
             } else {
@@ -615,6 +637,12 @@ impl EmbeddedRtspServer {
     }
 
     fn flush_access_unit(&self, route: RouteKey) {
+        if !self.parameter_sets_ready(route) {
+            self.shared.with_route_state_mut(route, |s| {
+                s.pending_access_unit.clear();
+            });
+            return;
+        }
         let nals = self.shared.with_route_state_mut(route, |s| {
             if s.pending_access_unit.is_empty() {
                 None
